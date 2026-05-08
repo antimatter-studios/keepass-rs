@@ -757,8 +757,6 @@ impl std::fmt::Display for Color {
 
 #[cfg(test)]
 mod database_tests {
-    use std::fs::File;
-
     use crate::{error::DatabaseOpenError, Database, DatabaseKey};
 
     #[cfg(feature = "save_kdbx4")]
@@ -768,7 +766,6 @@ mod database_tests {
         // `tests/resources/test_db_with_password.kdbx` fixture, which crates.io's
         // publish allowlist strips. Build a minimal vault in-process, save it,
         // then exercise `Database::get_xml` against the round-tripped bytes.
-        use crate::Database;
         let mut db = Database::new(Default::default());
         db.root.add_child(crate::db::Entry::new());
 
@@ -791,7 +788,6 @@ mod database_tests {
     fn test_xml() -> Result<(), DatabaseOpenError> {
         // Without the `save_kdbx4` feature we cannot synthesise a vault in-process
         // and the original on-disk fixture isn't shipped (see clean-room note above).
-        let _ = File::open;
         Ok(())
     }
 
