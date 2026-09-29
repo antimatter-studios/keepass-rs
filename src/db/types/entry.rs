@@ -22,7 +22,8 @@ use crate::{
 pub struct EntryId(Uuid);
 
 impl EntryId {
-    pub(crate) fn new() -> Self {
+    /// Generate a new random `EntryId`.
+    pub fn new() -> Self {
         Self(Uuid::new_v4())
     }
 
@@ -586,7 +587,7 @@ impl EntryMut<'_> {
         let previous_parent = self.parent;
 
         let mut parent = self.parent_mut();
-        parent.entries.remove(&my_id);
+        parent.entries.shift_remove(&my_id);
 
         #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // group existence is checked
         let mut new_parent = self.database.group_mut(group_id).unwrap();
@@ -635,7 +636,7 @@ impl EntryMut<'_> {
             .database
             .group_mut(entry.parent)
             .expect("Parent group not found");
-        parent.entries.remove(&self.id);
+        parent.entries.shift_remove(&self.id);
 
         // Clear any group's last_top_visible_entry that pointed to this entry.
         // This field is a UI hint and should not hold a dangling EntryId.
@@ -844,10 +845,16 @@ impl Drop for EntryTrack<'_> {
 #[allow(clippy::unwrap_used)]
 mod tests {
 
+    use super::EntryId;
     use crate::{
         db::{fields, Value},
         Database,
     };
+
+    #[test]
+    fn entry_id_new_generates_distinct_ids() {
+        assert_ne!(EntryId::new(), EntryId::new());
+    }
 
     #[test]
     fn test_entry() {

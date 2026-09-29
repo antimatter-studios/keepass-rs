@@ -11,7 +11,7 @@ use keepass::{
     DatabaseKey,
 };
 
-use rand::{rngs::StdRng, RngCore, SeedableRng};
+use rand::{rngs::StdRng, Rng, SeedableRng};
 
 use sha2::{Digest, Sha256};
 
@@ -335,4 +335,11 @@ pub fn save_to_vec(db: &Database, key: DatabaseKey) -> Vec<u8> {
     let mut buf = Vec::new();
     db.save(&mut buf, key).expect("save_to_vec: save failed");
     buf
+}
+
+#[cfg(feature = "save_kdbx4")]
+pub fn save_then_open(db: &Database, key: DatabaseKey) -> Database {
+    let mut buf = Vec::new();
+    db.save(&mut buf, key.clone()).expect("Unable to save database");
+    Database::open(&mut buf.as_slice(), key).expect("Unable to open database")
 }
