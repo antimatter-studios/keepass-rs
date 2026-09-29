@@ -5,7 +5,7 @@
 mod common;
 
 use common::combo_by_label;
-use keepass::db::{fields, Database, EntryId, EntryRef, Value};
+use keepass::db::{fields, Database, EntryId, EntryRef, History, Value};
 
 fn data(entry: &EntryRef<'_>, name: &str) -> Option<Vec<u8>> {
     entry.attachment_by_name(name).map(|a| a.data.get().clone())
@@ -136,4 +136,23 @@ fn removing_the_entry_after_reopening_drops_all_its_files() {
     assert_eq!(db.num_attachments(), 2);
     db.entry_mut(id).unwrap().remove();
     assert_eq!(db.num_attachments(), 0);
+}
+
+#[test]
+fn dropping_a_version_drops_the_files_only_it_used() {
+    let (mut db, id) = entry_with_history();
+    db.entry_mut(id).unwrap().edit_tracking(|e| {
+        e.add_attachment("key.bin", Value::Unprotected(b"new key".to_vec()));
+    });
+    let mut db = reopen(&db);
+    assert_eq!(db.num_attachments(), 2);
+
+    // both versions have the old key: dropping them drops it
+    db.entry_mut(id)
+        .unwrap()
+        .edit_history(|history| *history = History::default());
+    assert_eq!(db.num_attachments(), 1);
+    let db = reopen(&db);
+    let entry = db.entry(id).unwrap();
+    assert_eq!(data(&entry, "key.bin"), Some(b"new key".to_vec()));
 }

@@ -401,6 +401,28 @@ impl EntryMut<'_> {
         }
     }
 
+    /// Change the history of this entry in a closure: add, drop or reorder versions. The
+    /// attachments' bookkeeping follows, so a file only a dropped version used leaves the
+    /// database.
+    ///
+    /// NOTE: will always operate on the main Entry, not a historical version of it.
+    #[allow(clippy::expect_used, clippy::missing_panics_doc)] // entry existence is guaranteed
+    pub fn edit_history(&mut self, f: impl FnOnce(&mut History)) -> &mut Self {
+        let id = self.id;
+        let mut attachment_ids = self.database.entry_attachment_ids(id);
+
+        let entry = self.database.entries.get_mut(&id).expect("Entry not found");
+        let history = entry.history.get_or_insert_default();
+        f(history);
+        for version in &mut history.entries {
+            version.history = None;
+        }
+
+        attachment_ids.extend(self.database.entry_attachment_ids(id));
+        self.database.sync_attachment_refs(id, attachment_ids);
+        self
+    }
+
     /// Get a mutable reference to the parent group of this entry.
     pub fn parent_mut(&mut self) -> GroupMut<'_> {
         #[allow(clippy::unwrap_used, clippy::missing_panics_doc)] // parent always exists
