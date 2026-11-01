@@ -14,7 +14,7 @@ pub struct Times {
     pub last_modification_time: Option<Timestamp>,
     #[serde(default, with = "cs_opt_string", skip_serializing_if = "Option::is_none")]
     pub last_access_time: Option<Timestamp>,
-    #[serde(default)]
+    #[serde(default, deserialize_with = "expiry_or_default")]
     pub expiry_time: Timestamp,
 
     #[serde(default, with = "cs_opt_bool", skip_serializing_if = "Option::is_none")]
@@ -24,6 +24,14 @@ pub struct Times {
 
     #[serde(default, with = "cs_opt_string", skip_serializing_if = "Option::is_none")]
     pub location_changed: Option<Timestamp>,
+}
+
+/// Files can hold an empty `<ExpiryTime></ExpiryTime>`, which counts as a missing one.
+fn expiry_or_default<'de, D>(deserializer: D) -> Result<Timestamp, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    Ok(cs_opt_string::deserialize(deserializer)?.unwrap_or_default())
 }
 
 impl From<Times> for crate::db::Times {
@@ -58,6 +66,13 @@ impl From<crate::db::Times> for Times {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_empty_expiry_time_counts_as_missing() {
+        let empty: Times = quick_xml::de::from_str("<Times><ExpiryTime></ExpiryTime></Times>").unwrap();
+        let missing: Times = quick_xml::de::from_str("<Times></Times>").unwrap();
+        assert_eq!(empty.expiry_time.time, missing.expiry_time.time);
+    }
 
     #[test]
     fn test_deserialize_times() {

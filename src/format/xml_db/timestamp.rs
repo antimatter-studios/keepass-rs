@@ -1,6 +1,7 @@
 use base64::{engine::general_purpose as base64_engine, Engine as _};
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize, Serializer};
+use std::convert::TryInto;
 
 /// In KDBX4, timestamps are stored as seconds, Base64 encoded, since 0001-01-01 00:00:00.
 /// This function returns the epoch baseline used by KDBX for date serialization.
@@ -72,11 +73,15 @@ impl<'de> Deserialize<'de> for Timestamp {
                     .decode(t)
                     .map_err(serde::de::Error::custom)?;
 
-                // Cast the decoded base64 Vec into the array expected by i64::from_le_bytes
-                let mut a: [u8; 8] = [0, 0, 0, 0, 0, 0, 0, 0];
-                #[allow(clippy::indexing_slicing)] // v is guaranteed to be at least 8 bytes long
-                a.copy_from_slice(&v[0..8]);
-                let ndt = get_epoch_baseline() + chrono::Duration::seconds(i64::from_le_bytes(a));
+                // A file can hold anything here, so anything but a usable count of seconds
+                // is an error rather than a panic.
+                let seconds: [u8; 8] = v
+                    .get(..8)
+                    .and_then(|bytes| bytes.try_into().ok())
+                    .ok_or_else(|| serde::de::Error::custom("timestamp is shorter than 8 bytes"))?;
+                let ndt = chrono::Duration::try_seconds(i64::from_le_bytes(seconds))
+                    .and_then(|duration| get_epoch_baseline().checked_add_signed(duration))
+                    .ok_or_else(|| serde::de::Error::custom("timestamp is out of range"))?;
 
                 Ok(Timestamp::new_base64(ndt))
             }
@@ -112,6 +117,14 @@ mod tests {
 
     #[derive(Serialize, Deserialize)]
     struct Test<T>(T);
+
+    #[test]
+    fn a_timestamp_too_short_or_out_of_range_is_an_error() {
+        let too_short = base64_engine::STANDARD.encode([1, 2, 3]);
+        assert!(quick_xml::de::from_str::<Timestamp>(&too_short).is_err());
+        let out_of_range = base64_engine::STANDARD.encode(i64::MAX.to_le_bytes());
+        assert!(quick_xml::de::from_str::<Timestamp>(&out_of_range).is_err());
+    }
 
     #[test]
     fn test_deserialize_timestamp_iso8601() {
